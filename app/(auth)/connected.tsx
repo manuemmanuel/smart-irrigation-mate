@@ -1,32 +1,58 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Svg, Path } from 'react-native-svg';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useEffect, useRef } from 'react';
+import { Fonts } from '@/constants/Styles';
 
 export default function ConnectedScreen() {
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   return (
     <View style={styles.container}>
-      <Svg width={200} height={200} viewBox="0 0 200 200">
-        <Path
-          d="M100 50 A50 50 0 1 1 50 100 L150 100 A50 50 0 1 1 100 150"
-          stroke="#4444FF"
-          strokeWidth="2"
-          fill="none"
+      <Animated.View 
+        style={[
+          styles.iconContainer,
+          {
+            transform: [{ scale: scaleAnim }],
+            opacity: opacityAnim,
+          }
+        ]}
+      >
+        <MaterialCommunityIcons 
+          name="wifi-check" 
+          size={120} 
+          color="#4444FF"
+          style={styles.icon}
         />
-        <Path
-          d="M75 75 A25 25 0 1 1 125 125"
-          stroke="#4444FF"
-          strokeWidth="2"
-          fill="none"
-        />
-      </Svg>
+      </Animated.View>
 
-      <Text style={styles.title}>Device Connected</Text>
+      <Animated.View style={{ opacity: opacityAnim }}>
+        <Text style={styles.title}>Device Connected</Text>
+        <Text style={styles.subtitle}>Your device is now ready to use</Text>
+      </Animated.View>
 
       <TouchableOpacity 
         style={styles.button} 
         onPress={() => router.push('/(auth)/home')}
       >
-        <Text style={styles.buttonText}>Next</Text>
+        <Text style={styles.buttonText}>Continue</Text>
       </TouchableOpacity>
     </View>
   );
@@ -35,29 +61,62 @@ export default function ConnectedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
-    padding: 20,
+    backgroundColor: '#F8F8FF',
+    padding: 24,
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconContainer: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#EEEEFF',
+    borderRadius: 100,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 80,
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  icon: {
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontFamily: Fonts.bold,
     color: '#4444FF',
-    marginTop: 40,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontSize: 16,
+    fontFamily: Fonts.regular,
+    color: '#666',
+    textAlign: 'center',
     marginBottom: 40,
   },
   button: {
     backgroundColor: '#4444FF',
-    borderRadius: 25,
-    paddingVertical: 15,
+    borderRadius: 28,
+    paddingVertical: 16,
     paddingHorizontal: 40,
     width: '100%',
+    marginBottom: 40,
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     color: 'white',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: Fonts.bold,
     textAlign: 'center',
   },
 });

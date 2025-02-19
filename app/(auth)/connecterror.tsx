@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { router } from 'expo-router';
+import { Fonts } from '@/constants/Styles';
 
 export default function ConnectionErrorScreen() {
   return (
@@ -59,8 +60,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontFamily: Fonts.bold,
     color: '#4444FF',
     marginTop: 40,
     marginBottom: 40,
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: Fonts.bold,
     textAlign: 'center',
   },
 });

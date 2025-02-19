@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
+import { Fonts } from '@/constants/Styles';
 
 export default function WelcomeScreen() {
   useEffect(() => {
@@ -30,11 +31,13 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
+    gap: 8,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
+    fontSize: 42,
+    fontFamily: Fonts.bold,
     color: 'white',
     textAlign: 'center',
+    letterSpacing: 2,
   },
 });

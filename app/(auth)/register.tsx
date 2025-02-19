@@ -2,6 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'expo-router';
+import { Fonts } from '@/constants/Styles';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -42,6 +43,7 @@ export default function RegisterScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor="#666"
       />
 
       <TextInput
@@ -51,6 +53,7 @@ export default function RegisterScreen() {
         onChangeText={setConfirmEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor="#666"
       />
 
       <TextInput
@@ -59,6 +62,7 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        placeholderTextColor="#666"
       />
 
       <TextInput
@@ -67,6 +71,7 @@ export default function RegisterScreen() {
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
+        placeholderTextColor="#666"
       />
 
       <TouchableOpacity style={styles.button} onPress={handleRegister}>
@@ -85,39 +90,44 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4444FF',
+    backgroundColor: '#F8F8FF',
     padding: 20,
     justifyContent: 'center',
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: 'white',
+    fontFamily: Fonts.bold,
+    color: '#4444FF',
     marginBottom: 40,
     textAlign: 'center',
   },
   input: {
-    backgroundColor: '#E8E8E8',
-    borderRadius: 25,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#4444FF',
     padding: 15,
-    marginBottom: 15,
+    marginBottom: 16,
     fontSize: 16,
+    fontFamily: Fonts.regular,
   },
   button: {
-    backgroundColor: '#E8E8E8',
+    backgroundColor: '#4444FF',
     borderRadius: 25,
     padding: 15,
     alignItems: 'center',
     marginTop: 20,
   },
   buttonText: {
-    color: '#4444FF',
+    color: 'white',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: Fonts.bold,
   },
   loginText: {
-    color: 'white',
+    color: '#4444FF',
     textAlign: 'center',
     marginTop: 20,
+    fontSize: 16,
+    fontFamily: Fonts.medium,
   },
 });

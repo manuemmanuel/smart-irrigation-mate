@@ -1,15 +1,14 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Fonts } from '@/constants/Styles';
 
 export default function SearchDeviceScreen() {
   return (
     <View style={styles.container}>
-      <Image 
-        source={require('../../assets/images/magnifier.png')} 
-        style={styles.image}
-        // Fallback to icon if image not available
-        onError={(e) => console.log('Image failed to load')}
-      />
+      <View style={styles.iconContainer}>
+        <Ionicons name="search-circle" size={150} color="#4444FF" />
+      </View>
 
       <Text style={styles.title}>Search For Devices</Text>
 
@@ -40,15 +39,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  image: {
-    width: 150,
-    height: 150,
+  iconContainer: {
     marginBottom: 30,
-    tintColor: '#4444FF',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontFamily: Fonts.bold,
     color: '#4444FF',
     marginBottom: 40,
   },
@@ -62,6 +58,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     textAlign: 'center',
     color: '#333',
+    fontFamily: Fonts.regular,
   },
   button: {
     backgroundColor: '#4444FF',
@@ -73,7 +70,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: Fonts.bold,
     textAlign: 'center',
   },
 });

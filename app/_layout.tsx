@@ -14,7 +14,9 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    'Aeonik-Regular': require('../assets/fonts/AeonikTRIAL-Regular.otf'),
+    'Aeonik-Medium': require('../assets/fonts/AeonikTRIAL-Regular.otf'),
+    'Aeonik-Bold': require('../assets/fonts/AeonikTRIAL-Bold.otf'),
   });
 
   useEffect(() => {
