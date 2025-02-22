@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -6,6 +6,7 @@ import { Fonts } from '@/constants/Styles';
 import { router } from 'expo-router';
 import axios from 'axios';
 import * as Location from 'expo-location';
+import NetInfo from '@react-native-community/netinfo';
 
 interface WeatherData {
   last_updated: string;
@@ -41,7 +42,12 @@ interface WeatherData {
   gust_kph: number;
 }
 
-export default function HomeScreen() {
+interface UserProfile {
+  username: string;
+  avatar_url: string | null;
+}
+
+function HomeScreen() {
   const [userName, setUserName] = useState('');
   const [greeting, setGreeting] = useState('');
   const [weather, setWeather] = useState<WeatherData>({
@@ -78,11 +84,17 @@ export default function HomeScreen() {
     gust_kph: 0
   });
   const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [deviceConnected, setDeviceConnected] = useState(false);
+  const [location, setLocation] = useState<string>('');
+  const [connectedNetwork, setConnectedNetwork] = useState<string | null>(null);
 
   useEffect(() => {
     getUserProfile();
     setTimeBasedGreeting();
     getWeatherData();
+    checkDeviceConnection();
+    getCurrentLocation();
   }, []);
 
   const setTimeBasedGreeting = () => {
@@ -99,10 +111,25 @@ export default function HomeScreen() {
   };
 
   const getUserProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.email) {
-      const name = user.email.split('@')[0];
-      setUserName(name.charAt(0).toUpperCase() + name.slice(1));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) return;
+
+      // Fetch profile from app_user_profiles
+      const { data: profile, error } = await supabase
+        .from('app_user_profiles')
+        .select('username, avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setUserProfile(profile);
+
+      // Set username from profile or email
+      const displayName = profile?.username || user.email.split('@')[0];
+      setUserName(displayName.charAt(0).toUpperCase() + displayName.slice(1));
+    } catch (error) {
+      console.error('Error fetching profile:', error);
     }
   };
 
@@ -130,12 +157,113 @@ export default function HomeScreen() {
     }
   };
 
+  const checkDeviceConnection = async () => {
+    try {
+      const netInfo = await NetInfo.fetch();
+      setDeviceConnected(netInfo.type === 'wifi' && netInfo.isConnected);
+      if (netInfo.type === 'wifi' && netInfo.details?.ssid) {
+        setConnectedNetwork(netInfo.details.ssid);
+      } else {
+        setConnectedNetwork(null);
+      }
+    } catch (error) {
+      console.error('Error checking device connection:', error);
+      setDeviceConnected(false);
+      setConnectedNetwork(null);
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocation('Location access denied');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      try {
+        // Try reverse geocoding first
+        const [address] = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude
+        });
+
+        if (address) {
+          const locationString = address.city 
+            ? `${address.city}, ${address.region || address.country}`
+            : address.region 
+              ? `${address.region}, ${address.country}`
+              : address.country || 'Unknown location';
+          setLocation(locationString);
+        }
+      } catch (geocodeError) {
+        // If reverse geocoding fails, display coordinates in a readable format
+        console.log('Geocoding failed:', geocodeError);
+        const roundedLat = latitude.toFixed(4);
+        const roundedLong = longitude.toFixed(4);
+        setLocation(`${roundedLat}°, ${roundedLong}°`);
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setLocation('Location unavailable');
+    }
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    await Promise.all([
+      getUserProfile(),
+      getWeatherData()
+    ]);
+    setTimeBasedGreeting();
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.mainContent}>
         <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            <MaterialCommunityIcons name="account" size={60} color="#4444FF" />
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              style={styles.avatarContainer}
+              onPress={() => router.push('/(auth)/settings')}
+            >
+              {userProfile?.avatar_url ? (
+                <Image 
+                  source={{ uri: userProfile.avatar_url }} 
+                  style={styles.avatar}
+                />
+              ) : (
+                <MaterialCommunityIcons name="account" size={20} color="#4444FF" />
+              )}
+            </TouchableOpacity>
+            
+            <Text style={styles.headerTitle}>IrrigationMate</Text>
+            
+            <TouchableOpacity 
+              style={styles.refreshButton} 
+              onPress={refreshData}
+              disabled={loading}
+            >
+              <MaterialCommunityIcons 
+                name="refresh" 
+                size={20} 
+                color="#4444FF" 
+                style={[styles.refreshIcon, loading && styles.rotating]}
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.locationContainer}>
+            <MaterialCommunityIcons 
+              name="map-marker" 
+              size={20} 
+              color="#4444FF" 
+            />
+            <Text style={styles.locationText}>
+              {location || 'Fetching location...'}
+            </Text>
           </View>
         </View>
 
@@ -221,14 +349,56 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.deviceCard}>
-            <View style={styles.deviceInfo}>
-              <MaterialCommunityIcons name="wifi-check" size={24} color="#4444FF" />
-              <View style={styles.deviceTexts}>
-                <Text style={styles.deviceTitle}>Device Status</Text>
-                <Text style={styles.deviceStatus}>Connected</Text>
+            <View style={styles.mainDeviceCard}>
+              <View style={styles.deviceHeader}>
+                <View style={[
+                  styles.iconContainer,
+                  deviceConnected ? styles.iconContainerConnected : styles.iconContainerDisconnected
+                ]}>
+                  <MaterialCommunityIcons 
+                    name={deviceConnected ? "wifi-check" : "wifi-off"} 
+                    size={24} 
+                    color={deviceConnected ? "#4444FF" : "#FF4444"} 
+                  />
+                </View>
+                <View style={styles.headerTexts}>
+                  <Text style={styles.deviceTitle}>Device Status</Text>
+                  <View style={styles.statusContainer}>
+                    <View style={[
+                      styles.statusDot,
+                      { backgroundColor: deviceConnected ? '#4CAF50' : '#FF4444' }
+                    ]} />
+                    <Text style={[
+                      styles.deviceStatus,
+                      { color: deviceConnected ? '#4CAF50' : '#FF4444' }
+                    ]}>
+                      {deviceConnected ? 'Connected' : 'Disconnected'}
+                    </Text>
+                  </View>
+                </View>
               </View>
+
+              {deviceConnected && connectedNetwork && (
+                <View style={styles.networkInfoContainer}>
+                  <MaterialCommunityIcons 
+                    name="wifi" 
+                    size={20} 
+                    color="#666" 
+                  />
+                  <Text style={styles.networkName}>{connectedNetwork}</Text>
+                </View>
+              )}
+
+              {!deviceConnected && (
+                <TouchableOpacity 
+                  style={styles.connectButton}
+                  onPress={() => router.push('/(auth)/select')}
+                >
+                  <Text style={styles.connectButtonText}>Connect Device</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#4444FF" />
+                </TouchableOpacity>
+              )}
             </View>
-            <View style={styles.statusDot} />
           </View>
         </ScrollView>
       </View>
@@ -253,6 +423,8 @@ export default function HomeScreen() {
   );
 }
 
+export default HomeScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -269,31 +441,76 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   header: {
-    backgroundColor: '#EEEEFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    backgroundColor: 'rgba(238, 238, 255, 0.95)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#4444FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 4,
-    padding: 40,
-    paddingTop: 60,
+    elevation: 3,
+    paddingTop: 48,
+    paddingBottom: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(68, 68, 255, 0.1)',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontFamily: 'Aeonik-Medium',
+    color: '#4444FF',
+    letterSpacing: 0.3,
+    flex: 1,
+    textAlign: 'center',
   },
   avatarContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'white',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#4444FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(68, 68, 255, 0.15)',
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(68, 68, 255, 0.15)',
+  },
+  refreshIcon: {
+    opacity: 0.9,
+  },
+  rotating: {
+    opacity: 0.6,
+    transform: [{ rotate: '45deg' }],
   },
   content: {
     padding: 0,
@@ -384,12 +601,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   deviceCard: {
+    marginBottom: 24,
+  },
+  mainDeviceCard: {
     backgroundColor: 'white',
     padding: 20,
     borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     borderWidth: 2,
     borderColor: '#4444FF',
     shadowColor: '#4444FF',
@@ -398,30 +615,73 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  deviceInfo: {
+  deviceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
+    marginBottom: 16,
   },
-  deviceTexts: {
-    marginLeft: 8,
+  headerTexts: {
+    flex: 1,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconContainerConnected: {
+    backgroundColor: 'rgba(68, 68, 255, 0.1)',
+  },
+  iconContainerDisconnected: {
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
   },
   deviceTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: Fonts.medium,
     color: '#333',
+    marginBottom: 4,
   },
-  deviceStatus: {
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-    color: '#666',
-    marginTop: 2,
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4CAF50',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  deviceStatus: {
+    fontSize: 16,
+    fontFamily: Fonts.regular,
+  },
+  networkInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F8FF',
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  networkName: {
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+    color: '#666',
+  },
+  connectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(68, 68, 255, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+  },
+  connectButtonText: {
+    color: '#4444FF',
+    fontSize: 16,
+    fontFamily: Fonts.medium,
   },
   navbar: {
     flexDirection: 'row',
@@ -446,5 +706,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
     color: '#666',
     marginTop: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  locationText: {
+    fontSize: 14,
+    fontFamily: Fonts.medium,
+    color: '#666',
+    textAlign: 'center',
   },
 });

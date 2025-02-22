@@ -44,7 +44,20 @@
       [
         "expo-notifications"
       ],
-      "react-native-wifi-reborn"
+      "react-native-wifi-reborn",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "permissions": [
+              "android.permission.ACCESS_FINE_LOCATION",
+              "android.permission.ACCESS_COARSE_LOCATION",
+              "android.permission.ACCESS_WIFI_STATE",
+              "android.permission.CHANGE_WIFI_STATE"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -56,6 +69,7 @@
       "eas": {
         "projectId": "b8bca1d6-f53d-4b8f-87b6-70d0d3309383"
       }
-    }
+    },
+    "owner": "shadow04"
   }
 }

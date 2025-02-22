@@ -1,10 +1,11 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, Animated, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import WifiManager from 'react-native-wifi-reborn';
 import * as Location from 'expo-location';
 import { Fonts } from '@/constants/Styles';
+import NetInfo from '@react-native-community/netinfo';
 
 interface WifiNetwork {
   SSID: string;
@@ -26,12 +27,25 @@ const SkeletonItem = () => (
 export default function SelectDeviceScreen() {
   const [wifiNetworks, setWifiNetworks] = useState<WifiNetwork[]>([]);
   const [scanning, setScanning] = useState(true);
+  const [currentNetwork, setCurrentNetwork] = useState<string | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      requestPermissionsAndScan();
+      checkCurrentConnectionAndScan();
     }
   }, []);
+
+  const checkCurrentConnectionAndScan = async () => {
+    try {
+      const netInfo = await NetInfo.fetch();
+      if (netInfo.type === 'wifi' && netInfo.details?.ssid) {
+        setCurrentNetwork(netInfo.details.ssid);
+      }
+      requestPermissionsAndScan();
+    } catch (error) {
+      console.error('Error checking current connection:', error);
+    }
+  };
 
   const requestPermissionsAndScan = async () => {
     try {
@@ -49,41 +63,48 @@ export default function SelectDeviceScreen() {
 
   const scanWifiNetworks = async () => {
     if (Platform.OS === 'ios') {
-      alert('WiFi scanning is not available on iOS');
+      Alert.alert('Not Supported', 'WiFi scanning is not available on iOS');
       return;
     }
 
     try {
       setScanning(true);
-      // Mock data for development
-      const mockNetworks = [
-        { SSID: 'WiFi Network 1', BSSID: '00:00:00:00:00:01', strength: 80, isSecured: true },
-        { SSID: 'WiFi Network 2', BSSID: '00:00:00:00:00:02', strength: 65, isSecured: false },
-        { SSID: 'WiFi Network 3', BSSID: '00:00:00:00:00:03', strength: 45, isSecured: true },
-      ];
       
-      if (__DEV__) {
-        // Use mock data in development
-        setWifiNetworks(mockNetworks);
-      } else {
-        // Use real WiFi scanning in production
-        const networks = await WifiManager.loadWifiList();
-        const formattedNetworks = networks.map(network => ({
-          SSID: network.SSID,
-          BSSID: network.BSSID,
-          strength: Math.abs(network.level),
-          isSecured: network.capabilities.includes('WPA')
-        }));
-        setWifiNetworks(formattedNetworks);
+      // Check if WiFi is enabled
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isWifiEnabled) {
+        Alert.alert('WiFi Required', 'Please enable WiFi to scan for networks');
+        return;
       }
+
+      // Request location permission (required for WiFi scanning)
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Location permission is required to scan WiFi networks');
+        return;
+      }
+
+      // Scan for networks
+      const networks = await WifiManager.loadWifiList();
+      
+      const formattedNetworks = networks.map(network => ({
+        SSID: network.SSID,
+        BSSID: network.BSSID,
+        strength: Math.min(Math.abs(network.level), 100), // Convert dBm to percentage
+        isSecured: network.capabilities.includes('WPA') || 
+                   network.capabilities.includes('WEP') || 
+                   network.capabilities.includes('PSK'),
+      }));
+
+      // Sort networks by signal strength
+      const sortedNetworks = formattedNetworks
+        .filter(network => network.SSID) // Remove networks with empty SSID
+        .sort((a, b) => b.strength - a.strength);
+
+      setWifiNetworks(sortedNetworks);
     } catch (error) {
       console.error('Error scanning WiFi:', error);
-      // Set mock data on error
-      setWifiNetworks([
-        { SSID: 'Test Network 1', BSSID: '00:00:00:00:00:01', strength: 80, isSecured: true },
-        { SSID: 'Test Network 2', BSSID: '00:00:00:00:00:02', strength: 65, isSecured: false },
-        { SSID: 'Test Network 3', BSSID: '00:00:00:00:00:03', strength: 45, isSecured: true },
-      ]);
+      Alert.alert('Error', 'Failed to scan WiFi networks. Please try again.');
     } finally {
       setScanning(false);
     }
@@ -91,15 +112,37 @@ export default function SelectDeviceScreen() {
 
   const handleNetworkSelect = async (network: WifiNetwork) => {
     try {
-      // Attempt to connect to the network
-      // Note: This will only work for open networks
-      // For secured networks, you'll need to prompt for password
-      if (Platform.OS === 'android') {
+      if (network.isSecured) {
+        // For secured networks, navigate to a password input screen
+        router.push({
+          pathname: '/(auth)/wifi-password' as const,
+          params: { ssid: network.SSID, bssid: network.BSSID }
+        });
+      } else {
+        // For open networks, try to connect directly
         await WifiManager.connectToProtectedSSID(network.SSID, '', false, false);
         router.push('/(auth)/connected');
       }
     } catch (error) {
       console.error('Error connecting to network:', error);
+      Alert.alert('Error', 'Failed to connect to network');
+    }
+  };
+
+  const handleSkip = async () => {
+    try {
+      const netInfo = await NetInfo.fetch();
+      
+      if (netInfo.type === 'wifi' && netInfo.isConnected) {
+        // Device is connected to WiFi
+        router.push('/(auth)/connected');
+      } else {
+        // Device is not connected
+        router.push('/(auth)/connecterror');
+      }
+    } catch (error) {
+      console.error('Error checking connection:', error);
+      // If there's an error checking connection, assume not connected
       router.push('/(auth)/connecterror');
     }
   };
@@ -134,6 +177,37 @@ export default function SelectDeviceScreen() {
       <Text style={styles.title}>Select Device</Text>
       <View style={styles.underline} />
 
+      {currentNetwork && (
+        <View style={styles.currentConnection}>
+          <View style={styles.connectionHeader}>
+            <Ionicons 
+              name="wifi" 
+              size={24} 
+              color="#4444FF"
+            />
+            <View style={styles.headerTexts}>
+              <Text style={styles.currentConnectionTitle}>Current Connection</Text>
+              <Text style={styles.currentConnectionNetwork}>{currentNetwork}</Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.continueButton}
+            onPress={() => router.push('/(auth)/connected')}
+          >
+            <View style={styles.buttonContent}>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.continueButtonText}>Continue with Current Network</Text>
+                <Text style={styles.buttonSubtext}>Device is already connected</Text>
+              </View>
+              <View style={styles.arrowContainer}>
+                <Ionicons name="arrow-forward" size={20} color="#4444FF" />
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.deviceList}>
         {scanning ? (
           <FlatList
@@ -156,10 +230,10 @@ export default function SelectDeviceScreen() {
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
-          style={styles.button} 
-          onPress={() => router.push('/(auth)/connected')}
+          style={[styles.button, styles.skipButton]} 
+          onPress={handleSkip}
         >
-          <Text style={styles.buttonText}>Skip</Text>
+          <Text style={[styles.buttonText, styles.skipButtonText]}>Skip</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -284,5 +358,82 @@ const styles = StyleSheet.create({
   networkListContent: {
     paddingHorizontal: 2,
     paddingBottom: 20,
+  },
+  currentConnection: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 24,
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(68, 68, 255, 0.1)',
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  connectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerTexts: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  currentConnectionTitle: {
+    fontSize: 16,
+    fontFamily: Fonts.medium,
+    color: '#4444FF',
+    opacity: 0.8,
+  },
+  currentConnectionNetwork: {
+    fontSize: 20,
+    fontFamily: Fonts.bold,
+    color: '#333',
+    marginTop: 4,
+  },
+  continueButton: {
+    backgroundColor: '#F8F8FF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(68, 68, 255, 0.15)',
+    overflow: 'hidden',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  buttonTextContainer: {
+    flex: 1,
+  },
+  continueButtonText: {
+    color: '#4444FF',
+    fontSize: 16,
+    fontFamily: Fonts.medium,
+    marginBottom: 4,
+  },
+  buttonSubtext: {
+    color: '#666',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+  },
+  arrowContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(68, 68, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skipButton: {
+    backgroundColor: 'white',
+    borderWidth: 2,
+    borderColor: '#4444FF',
+  },
+  skipButtonText: {
+    color: '#4444FF',
   },
 });
