@@ -181,69 +181,93 @@ export default function ControlPage() {
           </View>
         </View>
 
+        <View style={[styles.mainDeviceCard, { marginBottom: 16 }]}>
+          <Text style={styles.label}>Device IP Address</Text>
+          <TextInput
+            style={styles.ipInput}
+            value={ipAddress}
+            onChangeText={handleIpChange}
+            placeholder="Enter ESP32 IP Address"
+            keyboardType="numeric"
+          />
+        </View>
+
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
-          <View style={styles.mainDeviceCard}>
-            <View style={styles.statusContainer}>
-              <MaterialCommunityIcons name="water-percent" size={24} color="#4444FF" />
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.label}>Moisture Level</Text>
-                <Text style={[styles.value, { color: theme.colors.text }]}>
-                  {status.moistureLevel} ({getMoistureStatus(status.moistureLevel).text})
-                </Text>
-              </View>
+          {loading ? (
+            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center' }]}>
+              <ActivityIndicator size="large" color="#4444FF" />
             </View>
-
-            <View style={styles.statusContainer}>
-              <MaterialCommunityIcons 
-                name={status.pumpStatus ? "pump" : "pump-off"} 
-                size={24} 
-                color={status.pumpStatus ? '#4CAF50' : '#FF4444'} 
-              />
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.label}>Pump Status</Text>
-                <Text style={[styles.value, { color: status.pumpStatus ? '#4CAF50' : '#FF4444' }]}>
-                  {status.pumpStatus ? 'Running' : 'Stopped'}
-                </Text>
-              </View>
+          ) : error ? (
+            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center' }]}>
+              <Text style={[styles.value, { color: '#FF4444' }]}>{error}</Text>
             </View>
-
-            <View style={styles.statusContainer}>
-              <MaterialCommunityIcons 
-                name={status.autoMode ? "auto-fix" : "hand"} 
-                size={24} 
-                color="#4444FF" 
-              />
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.label}>Operation Mode</Text>
-                <Switch
-                  value={status.autoMode}
-                  onValueChange={toggleMode}
-                  trackColor={{ false: '#767577', true: '#81b0ff' }}
-                  thumbColor={status.autoMode ? '#4444FF' : '#f4f3f4'}
-                />
+          ) : (
+            <View style={styles.mainDeviceCard}>
+              <View style={styles.statusContainer}>
+                <MaterialCommunityIcons name="water-percent" size={24} color="#4444FF" />
+                <View style={styles.statusTextContainer}>
+                  <Text style={styles.label}>Moisture Level</Text>
+                  <Text style={[styles.value, { color: theme.theme.colors.text }]}>
+                    {status?.moistureLevel} ({status ? getMoistureStatus(status.moistureLevel).text : 'N/A'})
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            {!status.autoMode && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: status.pumpStatus ? 'rgba(255, 68, 68, 0.1)' : 'rgba(68, 68, 255, 0.1)' }]}
-                onPress={() => sendCommand(status.pumpStatus ? 'stop' : 'start')}
-              >
-                <Text style={[styles.actionButtonText, { color: status.pumpStatus ? '#FF4444' : '#4444FF' }]}>
-                  {status.pumpStatus ? 'Stop Pump' : 'Start Pump'}
-                </Text>
+              <View style={styles.statusContainer}>
                 <MaterialCommunityIcons 
-                  name={status.pumpStatus ? "stop-circle" : "play-circle"} 
+                  name={status?.pumpStatus ? "water-pump" : "water-pump-off"} 
                   size={24} 
-                  color={status.pumpStatus ? '#FF4444' : '#4444FF'} 
+                  color={status?.pumpStatus ? '#4CAF50' : '#FF4444'} 
                 />
-              </TouchableOpacity>
-            )}
-          </View>
+                <View style={styles.statusTextContainer}>
+                  <Text style={styles.label}>Pump Status</Text>
+                  <Text style={[styles.value, { color: status?.pumpStatus ? '#4CAF50' : '#FF4444' }]}>
+                    {status?.pumpStatus ? 'Running' : 'Stopped'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.statusContainer}>
+                <MaterialCommunityIcons 
+                  name={status?.autoMode ? "auto-fix" : "hand-pointing-right"} 
+                  size={24} 
+                  color="#4444FF" 
+                />
+                <View style={styles.statusTextContainer}>
+                  <Text style={styles.label}>Operation Mode</Text>
+                  <Switch
+                    value={status?.autoMode ?? false}
+                    onValueChange={toggleMode}
+                    trackColor={{ false: '#767577', true: '#81b0ff' }}
+                    thumbColor={status?.autoMode ? '#4444FF' : '#f4f3f4'}
+                  />
+                </View>
+              </View>
+
+              {!status?.autoMode && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: status?.pumpStatus ? 'rgba(255, 68, 68, 0.1)' : 'rgba(68, 68, 255, 0.1)' }]}
+                  onPress={() => status?.pumpStatus ? handleStopPump() : handleStartPump()}
+                >
+                  <Text style={[styles.actionButtonText, { color: status?.pumpStatus ? '#FF4444' : '#4444FF' }]}>
+                    {status?.pumpStatus ? 'Stop Pump' : 'Start Pump'}
+                  </Text>
+                  <MaterialCommunityIcons 
+                    name={status?.pumpStatus ? "stop-circle" : "play-circle"} 
+                    size={24} 
+                    color={status?.pumpStatus ? '#FF4444' : '#4444FF'} 
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </ScrollView>
       </View>
 
@@ -275,6 +299,13 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
+    paddingTop: 0,
+  },
   header: {
     backgroundColor: 'rgba(238, 238, 255, 0.95)',
     borderBottomLeftRadius: 24,
@@ -298,7 +329,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 22,
-    fontFamily: 'Aeonik-Medium',
+    fontFamily: Fonts.medium,
     color: '#4444FF',
     letterSpacing: 0.3,
     flex: 1,
@@ -318,28 +349,6 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1.5,
     borderColor: 'rgba(68, 68, 255, 0.15)',
-  },
-  connectionStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontFamily: Fonts.medium,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
   },
   mainDeviceCard: {
     backgroundColor: 'white',
@@ -371,6 +380,7 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 18,
     fontFamily: Fonts.bold,
+    color: '#333',
   },
   actionButton: {
     flexDirection: 'row',
@@ -382,6 +392,22 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 16,
+    fontFamily: Fonts.medium,
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 14,
     fontFamily: Fonts.medium,
   },
   navbar: {
@@ -407,5 +433,15 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
     color: '#666',
     marginTop: 4,
+  },
+  ipInput: {
+    borderWidth: 1,
+    borderColor: '#EEEEFF',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: Fonts.regular,
+    color: '#333',
+    backgroundColor: '#FFFFFF',
   },
 });
