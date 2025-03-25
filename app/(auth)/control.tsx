@@ -74,12 +74,12 @@ export default function ControlPage() {
   };
 
   const handleIpChange = async (newIp: string) => {
-    if (validateIpAddress(newIp)) {
-      setIpAddress(newIp);
+    setIpAddress(newIp); // Update the input value immediately
+    
+    // Only validate and save when the IP format is complete
+    if (newIp.length > 0 && validateIpAddress(newIp)) {
       await saveIpAddress(newIp);
       fetchStatus(newIp);
-    } else {
-      Alert.alert('Invalid IP', 'Please enter a valid IP address');
     }
   };
 
@@ -181,35 +181,41 @@ export default function ControlPage() {
           </View>
         </View>
 
-        <View style={[styles.mainDeviceCard, { marginBottom: 16 }]}>
-          <Text style={styles.label}>Device IP Address</Text>
-          <TextInput
-            style={styles.ipInput}
-            value={ipAddress}
-            onChangeText={handleIpChange}
-            placeholder="Enter ESP32 IP Address"
-            keyboardType="numeric"
-          />
-        </View>
-
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: 16 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
+          <View style={[styles.mainDeviceCard, { marginBottom: 16 }]}>
+            <View style={styles.ipHeader}>
+              <View>
+                <Text style={styles.label}>Device IP Address</Text>
+                <TextInput
+                  style={styles.ipInput}
+                  value={ipAddress}
+                  onChangeText={handleIpChange}
+                  placeholder="Enter ESP32 IP Address"
+                  keyboardType="numeric"
+                />
+              </View>
+              <MaterialCommunityIcons name="ip-network" size={24} color="#4444FF" />
+            </View>
+          </View>
+
           {loading ? (
-            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center' }]}>
+            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center', minHeight: 200 }]}>
               <ActivityIndicator size="large" color="#4444FF" />
             </View>
           ) : error ? (
-            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center' }]}>
-              <Text style={[styles.value, { color: '#FF4444' }]}>{error}</Text>
+            <View style={[styles.mainDeviceCard, { alignItems: 'center', justifyContent: 'center', minHeight: 200 }]}>
+              <MaterialCommunityIcons name="alert-circle" size={48} color="#FF4444" />
+              <Text style={[styles.value, { color: '#FF4444', marginTop: 16 }]}>{error}</Text>
             </View>
           ) : (
-            <View style={styles.mainDeviceCard}>
+            <View style={[styles.mainDeviceCard, styles.elevatedCard]}>
               <View style={styles.statusContainer}>
                 <MaterialCommunityIcons name="water-percent" size={24} color="#4444FF" />
                 <View style={styles.statusTextContainer}>
@@ -308,18 +314,17 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: 'rgba(238, 238, 255, 0.95)',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     shadowColor: '#4444FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
     paddingTop: 48,
-    paddingBottom: 12,
+    paddingBottom: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(68, 68, 255, 0.1)',
+    borderWidth: 0,
   },
   headerContent: {
     flexDirection: 'row',
@@ -352,15 +357,18 @@ const styles = StyleSheet.create({
   },
   mainDeviceCard: {
     backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#4444FF',
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 0,
     shadowColor: '#4444FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  elevatedCard: {
+    transform: [{ scale: 1.02 }],
+    marginHorizontal: 4,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -434,14 +442,22 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
+  ipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   ipInput: {
     borderWidth: 1,
     borderColor: '#EEEEFF',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
     fontFamily: Fonts.regular,
     color: '#333',
     backgroundColor: '#FFFFFF',
+    marginTop: 8,
+    width: '100%',
+    minWidth: 200,
   },
 });
