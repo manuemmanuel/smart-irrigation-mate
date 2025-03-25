@@ -8,10 +8,16 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
-  RefreshControl
+  RefreshControl,
+  Switch
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import init, { Paho } from 'react_native_mqtt';
+import { useTheme } from '@/components/ThemeProvider';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { Fonts } from '@/constants/Styles';
 
 // Default configuration
 const DEFAULT_IP = "192.168.1.100";
@@ -26,7 +32,7 @@ interface SystemStatus {
   autoMode: boolean;
 }
 
-export default function ControlScreen() {
+export default function ControlPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +41,7 @@ export default function ControlScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [moistureHistory, setMoistureHistory] = useState<number[]>([]);
+  const theme = useTheme();
 
   // Load saved IP address on component mount
   useEffect(() => {
@@ -138,288 +145,267 @@ export default function ControlScreen() {
     return { text: 'Very Moist', color: '#2196F3' };
   };
 
+  const toggleMode = () => {
+    if (status) {
+      handleSetMode(status.autoMode ? 'MANUAL' : 'AUTO');
+    }
+  };
+
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.connectionCard}>
-        <Text style={styles.title}>Connection Settings</Text>
-        <View style={styles.ipInputContainer}>
-          <TextInput
-            style={styles.ipInput}
-            value={ipAddress}
-            onChangeText={handleIpChange}
-            placeholder="Enter ESP32 IP Address"
-            keyboardType="numeric"
-          />
-          <View style={[styles.connectionIndicator, { backgroundColor: isConnected ? '#4CAF50' : '#F44336' }]} />
-        </View>
-        <Text style={styles.connectionStatus}>
-          {isConnected ? 'Connected' : 'Disconnected'}
-        </Text>
-        {lastUpdate && (
-          <Text style={styles.lastUpdate}>
-            Last Update: {lastUpdate.toLocaleTimeString()}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.statusCard}>
-        <Text style={styles.title}>System Status</Text>
-        
-        {loading ? (
-          <ActivityIndicator size="large" color="#007AFF" />
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : status ? (
-          <>
-            <View style={styles.statusItem}>
-              <Text style={styles.label}>Moisture Level:</Text>
-              <View style={styles.valueContainer}>
-                <Text style={[styles.value, { color: getMoistureStatus(status.moistureLevel).color }]}>
-                  {status.moistureLevel}
-                </Text>
-                <Text style={[styles.moistureStatus, { color: getMoistureStatus(status.moistureLevel).color }]}>
-                  {getMoistureStatus(status.moistureLevel).text}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.statusItem}>
-              <Text style={styles.label}>Pump Status:</Text>
-              <Text style={[styles.value, status.pumpStatus ? styles.onText : styles.offText]}>
-                {status.pumpStatus ? 'ON' : 'OFF'}
-              </Text>
-            </View>
-            <View style={styles.statusItem}>
-              <Text style={styles.label}>Mode:</Text>
-              <Text style={styles.value}>{status.autoMode ? 'AUTO' : 'MANUAL'}</Text>
-            </View>
-          </>
-        ) : null}
-      </View>
-
-      <View style={styles.controlCard}>
-        <Text style={styles.title}>Pump Control</Text>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity 
-            style={[styles.button, styles.startButton]} 
-            onPress={handleStartPump}
-            disabled={loading || !isConnected}
-          >
-            <Text style={styles.buttonText}>Start Pump</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.button, styles.stopButton]} 
-            onPress={handleStopPump}
-            disabled={loading || !isConnected}
-          >
-            <Text style={styles.buttonText}>Stop Pump</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.controlCard}>
-        <Text style={styles.title}>Operation Mode</Text>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity 
-            style={[styles.button, styles.modeButton]} 
-            onPress={() => handleSetMode('AUTO')}
-            disabled={loading || !isConnected}
-          >
-            <Text style={styles.buttonText}>Auto Mode</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.button, styles.modeButton]} 
-            onPress={() => handleSetMode('MANUAL')}
-            disabled={loading || !isConnected}
-          >
-            <Text style={styles.buttonText}>Manual Mode</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {moistureHistory.length > 0 && (
-        <View style={styles.historyCard}>
-          <Text style={styles.title}>Moisture History</Text>
-          <View style={styles.historyContainer}>
-            {moistureHistory.map((level, index) => (
-              <View key={index} style={styles.historyItem}>
-                <Text style={[styles.historyValue, { color: getMoistureStatus(level).color }]}>
-                  {level}
-                </Text>
-                <Text style={styles.historyTime}>
-                  {new Date(Date.now() - (moistureHistory.length - 1 - index) * 5000).toLocaleTimeString()}
-                </Text>
-              </View>
-            ))}
+    <View style={styles.container}>
+      <View style={styles.mainContent}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => router.back()}
+            >
+              <MaterialCommunityIcons name="arrow-left" size={20} color="#4444FF" />
+            </TouchableOpacity>
+            
+            <Text style={styles.headerTitle}>Irrigation Control</Text>
+            
+            <View style={styles.iconButton} />
+          </View>
+          <View style={styles.connectionStatus}>
+            <View style={[
+              styles.statusDot,
+              { backgroundColor: isConnected ? '#4CAF50' : '#FF4444' }
+            ]} />
+            <Text style={[
+              styles.statusText,
+              { color: isConnected ? '#4CAF50' : '#FF4444' }
+            ]}>
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </Text>
           </View>
         </View>
-      )}
-    </ScrollView>
+
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.mainDeviceCard}>
+            <View style={styles.statusContainer}>
+              <MaterialCommunityIcons name="water-percent" size={24} color="#4444FF" />
+              <View style={styles.statusTextContainer}>
+                <Text style={styles.label}>Moisture Level</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>
+                  {status.moistureLevel} ({getMoistureStatus(status.moistureLevel).text})
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.statusContainer}>
+              <MaterialCommunityIcons 
+                name={status.pumpStatus ? "pump" : "pump-off"} 
+                size={24} 
+                color={status.pumpStatus ? '#4CAF50' : '#FF4444'} 
+              />
+              <View style={styles.statusTextContainer}>
+                <Text style={styles.label}>Pump Status</Text>
+                <Text style={[styles.value, { color: status.pumpStatus ? '#4CAF50' : '#FF4444' }]}>
+                  {status.pumpStatus ? 'Running' : 'Stopped'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.statusContainer}>
+              <MaterialCommunityIcons 
+                name={status.autoMode ? "auto-fix" : "hand"} 
+                size={24} 
+                color="#4444FF" 
+              />
+              <View style={styles.statusTextContainer}>
+                <Text style={styles.label}>Operation Mode</Text>
+                <Switch
+                  value={status.autoMode}
+                  onValueChange={toggleMode}
+                  trackColor={{ false: '#767577', true: '#81b0ff' }}
+                  thumbColor={status.autoMode ? '#4444FF' : '#f4f3f4'}
+                />
+              </View>
+            </View>
+
+            {!status.autoMode && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: status.pumpStatus ? 'rgba(255, 68, 68, 0.1)' : 'rgba(68, 68, 255, 0.1)' }]}
+                onPress={() => sendCommand(status.pumpStatus ? 'stop' : 'start')}
+              >
+                <Text style={[styles.actionButtonText, { color: status.pumpStatus ? '#FF4444' : '#4444FF' }]}>
+                  {status.pumpStatus ? 'Stop Pump' : 'Start Pump'}
+                </Text>
+                <MaterialCommunityIcons 
+                  name={status.pumpStatus ? "stop-circle" : "play-circle"} 
+                  size={24} 
+                  color={status.pumpStatus ? '#FF4444' : '#4444FF'} 
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={styles.navbar}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/(auth)/home')}>
+          <MaterialCommunityIcons name="home" size={28} color="#666" />
+          <Text style={styles.navText}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem}>
+          <MaterialCommunityIcons name="white-balance-sunny" size={28} color="#4444FF" />
+          <Text style={styles.navText}>Control</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/(auth)/settings')}>
+          <MaterialCommunityIcons name="cog" size={28} color="#666" />
+          <Text style={styles.navText}>Settings</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 16,
+    backgroundColor: '#F8F8FF',
   },
-  connectionCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  ipInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ipInput: {
+  mainContent: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 8,
-    marginRight: 8,
-    fontSize: 16,
   },
-  connectionIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  header: {
+    backgroundColor: 'rgba(238, 238, 255, 0.95)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    paddingTop: 48,
+    paddingBottom: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(68, 68, 255, 0.1)',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontFamily: 'Aeonik-Medium',
+    color: '#4444FF',
+    letterSpacing: 0.3,
+    flex: 1,
+    textAlign: 'center',
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(68, 68, 255, 0.15)',
   },
   connectionStatus: {
-    fontSize: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    fontFamily: Fonts.medium,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
+  },
+  mainDeviceCard: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#4444FF',
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 16,
+  },
+  statusTextContainer: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: Fonts.medium,
     color: '#666',
     marginBottom: 4,
   },
-  lastUpdate: {
-    fontSize: 14,
-    color: '#999',
-  },
-  statusCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  controlCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#333',
-  },
-  statusItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
-    color: '#666',
-  },
-  valueContainer: {
-    alignItems: 'flex-end',
-  },
   value: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontFamily: Fonts.bold,
   },
-  moistureStatus: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  onText: {
-    color: '#4CAF50',
-  },
-  offText: {
-    color: '#F44336',
-  },
-  buttonRow: {
+  actionButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  button: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
     alignItems: 'center',
-  },
-  startButton: {
-    backgroundColor: '#4CAF50',
-  },
-  stopButton: {
-    backgroundColor: '#F44336',
-  },
-  modeButton: {
-    backgroundColor: '#2196F3',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: '#F44336',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  historyCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    justifyContent: 'space-between',
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  historyContainer: {
+    borderRadius: 12,
     marginTop: 8,
   },
-  historyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  historyValue: {
+  actionButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Fonts.medium,
   },
-  historyTime: {
-    fontSize: 14,
+  navbar: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEFF',
+    justifyContent: 'space-between',
+    shadowColor: '#4444FF',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  navItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  navText: {
+    fontSize: 12,
+    fontFamily: Fonts.medium,
     color: '#666',
+    marginTop: 4,
   },
 });
