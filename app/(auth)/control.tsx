@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import init, { Paho } from 'react_native_mqtt';
 import { useTheme } from '@/components/ThemeProvider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -41,16 +40,13 @@ interface SystemStatus {
   autoMode: boolean;
 }
 
-// Create axios instance with persistent connection
+// Use this instead
 const axiosInstance = axios.create({
   timeout: LONG_POLLING_TIMEOUT,
   headers: {
-    'Connection': 'keep-alive',
-    'Keep-Alive': `timeout=${KEEP_ALIVE_TIMEOUT}`,
-  },
-  // Prevent timeout from interrupting long polling
-  httpAgent: new (require('http').Agent)({ keepAlive: true }),
-  httpsAgent: new (require('https').Agent)({ keepAlive: true }),
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
 });
 
 export default function ControlPage() {
