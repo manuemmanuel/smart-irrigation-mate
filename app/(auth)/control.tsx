@@ -26,11 +26,32 @@ const PUMP_START_ENDPOINT = (ip: string) => `http://${ip}/pump/start`;
 const PUMP_STOP_ENDPOINT = (ip: string) => `http://${ip}/pump/stop`;
 const MODE_ENDPOINT = (ip: string) => `http://${ip}/mode`;
 
+// Add these constants at the top
+const POLLING_INTERVAL = 10000; // Increase to 10 seconds
+const CONNECTION_TIMEOUT = 8000; // 8 seconds timeout
+const RETRY_DELAY = 5000; // 5 seconds between retries
+
+// Update the constants
+const LONG_POLLING_TIMEOUT = 30000; // 30 seconds
+const KEEP_ALIVE_TIMEOUT = 60000; // 60 seconds
+
 interface SystemStatus {
   moistureLevel: number;
   pumpStatus: boolean;
   autoMode: boolean;
 }
+
+// Create axios instance with persistent connection
+const axiosInstance = axios.create({
+  timeout: LONG_POLLING_TIMEOUT,
+  headers: {
+    'Connection': 'keep-alive',
+    'Keep-Alive': `timeout=${KEEP_ALIVE_TIMEOUT}`,
+  },
+  // Prevent timeout from interrupting long polling
+  httpAgent: new (require('http').Agent)({ keepAlive: true }),
+  httpsAgent: new (require('https').Agent)({ keepAlive: true }),
+});
 
 export default function ControlPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -41,6 +62,8 @@ export default function ControlPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [moistureHistory, setMoistureHistory] = useState<number[]>([]);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const MAX_RECONNECT_ATTEMPTS = 3;
   const theme = useTheme();
 
   // Load saved IP address on component mount
@@ -74,60 +97,166 @@ export default function ControlPage() {
   };
 
   const handleIpChange = async (newIp: string) => {
-    setIpAddress(newIp); // Update the input value immediately
-    
-    // Only validate and save when the IP format is complete
+    setIpAddress(newIp);
     if (newIp.length > 0 && validateIpAddress(newIp)) {
-      await saveIpAddress(newIp);
-      fetchStatus(newIp);
-    }
-  };
-
-  const fetchStatus = async (ip: string) => {
-    try {
       setLoading(true);
-      const response = await axios.get(STATUS_ENDPOINT(ip), { timeout: 5000 });
-      setStatus(response.data);
-      setError(null);
-      setIsConnected(true);
-      setLastUpdate(new Date());
-      
-      // Update moisture history
-      setMoistureHistory(prev => {
-        const newHistory = [...prev, response.data.moistureLevel];
-        return newHistory.slice(-10); // Keep last 10 readings
-      });
-    } catch (err) {
-      setError('Failed to fetch status from ESP32');
-      setIsConnected(false);
-      console.error('Status fetch error:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const sendCommand = async (endpoint: string, params?: any) => {
-    try {
-      setLoading(true);
-      const response = await axios.post(endpoint, null, { params, timeout: 5000 });
-      if (response.status === 200) {
-        await fetchStatus(ipAddress);
+      try {
+        await saveIpAddress(newIp);
+        await fetchStatus(newIp);
+      } catch (err) {
+        setError('Failed to connect to device');
       }
-    } catch (err) {
-      setError('Failed to send command');
-      console.error('Command error:', err);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const fetchStatus = async (ip: string, isReconnectAttempt = false) => {
+    try {
+      if (!isReconnectAttempt) {
+        setLoading(true);
+      }
+      
+      if (!validateIpAddress(ip)) {
+        throw new Error('Invalid IP address format');
+      }
+
+      // Use long polling endpoint
+      const response = await axiosInstance.get(STATUS_ENDPOINT(ip), {
+        params: {
+          lastUpdate: lastUpdate ? lastUpdate.getTime() : 0,
+          timeout: LONG_POLLING_TIMEOUT,
+        },
+      });
+
+      // Only update if we got new data
+      if (response.data) {
+        setStatus(response.data);
+        setError(null);
+        setIsConnected(true);
+        setLastUpdate(new Date());
+        setReconnectAttempts(0);
+        
+        setMoistureHistory(prev => {
+          const newHistory = [...prev, response.data.moistureLevel];
+          return newHistory.slice(-10);
+        });
+      }
+    } catch (err: any) {
+      console.log('Connection error:', err.message);
+      
+      // Handle connection errors
+      if (err.message.includes('Network Error') || err.code === 'ECONNABORTED') {
+        if (!isReconnectAttempt) {
+          setError('Connection interrupted. Reconnecting...');
+          setIsConnected(false);
+          handleReconnect(ip);
+        } else if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          handleReconnect(ip);
+        } else {
+          setError('Connection lost. Please check device and network connection.');
+          setIsConnected(false);
+          setStatus(null);
+        }
+      } else {
+        setError(`Connection error: ${err.message}`);
+        setIsConnected(false);
+        setStatus(null);
+      }
+    } finally {
+      if (!isReconnectAttempt) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  };
+
+  const handleReconnect = async (ip: string) => {
+    setReconnectAttempts(prev => prev + 1);
+    setTimeout(() => {
+      fetchStatus(ip, true);
+    }, RETRY_DELAY);
   };
 
   useEffect(() => {
+    let isActive = true;
+    let pollTimeoutId: NodeJS.Timeout;
+
+    const pollStatus = async () => {
+      if (!isActive || !isConnected || !validateIpAddress(ipAddress)) return;
+      
+      try {
+        await fetchStatus(ipAddress);
+        // Immediately start next long poll
+        if (isActive) {
+          pollTimeoutId = setTimeout(pollStatus, 100); // Small delay between polls
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+        if (isActive) {
+          pollTimeoutId = setTimeout(pollStatus, 5000); // Retry after 5s on error
+        }
+      }
+    };
+
     if (isConnected) {
-      const interval = setInterval(() => fetchStatus(ipAddress), 5000);
-      return () => clearInterval(interval);
+      pollStatus();
     }
+
+    return () => {
+      isActive = false;
+      if (pollTimeoutId) {
+        clearTimeout(pollTimeoutId);
+      }
+    };
   }, [isConnected, ipAddress]);
+
+  // Add network connectivity check
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        if (validateIpAddress(ipAddress)) {
+          await fetchStatus(ipAddress);
+        }
+      } catch (err) {
+        console.error('Initial connection check failed:', err);
+      }
+    };
+
+    checkConnection();
+  }, [ipAddress]);
+
+  const sendCommand = async (endpoint: string, body?: string) => {
+    try {
+      setLoading(true);
+      console.log('Sending command:', endpoint, body); // Debug log
+
+      const response = await axiosInstance.post(endpoint, body, { 
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        }
+      });
+      
+      console.log('Response:', response.data); // Debug log
+      
+      if (response.status === 200) {
+        await fetchStatus(ipAddress);
+      }
+    } catch (err: any) {
+      console.error('Command error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      if (err.response?.data?.error) {
+        setError(`Command failed: ${err.response.data.error}`);
+      } else {
+        setError('Failed to send command: ' + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -136,7 +265,12 @@ export default function ControlPage() {
 
   const handleStartPump = () => sendCommand(PUMP_START_ENDPOINT(ipAddress));
   const handleStopPump = () => sendCommand(PUMP_STOP_ENDPOINT(ipAddress));
-  const handleSetMode = (mode: 'AUTO' | 'MANUAL') => sendCommand(MODE_ENDPOINT(ipAddress), { mode });
+  const handleSetMode = (mode: 'AUTO' | 'MANUAL') => {
+    // Send raw JSON string in the exact format ESP32 expects
+    const requestBody = `{"mode":"${mode}"}`;  // This creates {"mode":"AUTO"} or {"mode":"MANUAL"}
+
+    sendCommand(MODE_ENDPOINT(ipAddress), requestBody);
+  };
 
   const getMoistureStatus = (level: number) => {
     if (level > 2900) return { text: 'Very Dry', color: '#F44336' };
@@ -147,7 +281,10 @@ export default function ControlPage() {
 
   const toggleMode = () => {
     if (status) {
-      handleSetMode(status.autoMode ? 'MANUAL' : 'AUTO');
+      // Explicitly set the mode
+      const newMode = status.autoMode ? 'MANUAL' : 'AUTO';
+      console.log('Toggling mode to:', newMode); // Debug log
+      handleSetMode(newMode);
     }
   };
 
@@ -186,22 +323,31 @@ export default function ControlPage() {
           contentContainerStyle={[styles.scrollContent, { paddingTop: 16 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              colors={['#4444FF']}
+            />
           }
         >
           <View style={[styles.mainDeviceCard, { marginBottom: 16 }]}>
             <View style={styles.ipHeader}>
-              <View>
+              <View style={{ flex: 1, marginRight: 16 }}>
                 <Text style={styles.label}>Device IP Address</Text>
                 <TextInput
-                  style={styles.ipInput}
+                  style={[styles.ipInput, !isConnected && { borderColor: '#FF4444' }]}
                   value={ipAddress}
                   onChangeText={handleIpChange}
                   placeholder="Enter ESP32 IP Address"
                   keyboardType="numeric"
+                  editable={!loading}
                 />
               </View>
-              <MaterialCommunityIcons name="ip-network" size={24} color="#4444FF" />
+              <MaterialCommunityIcons 
+                name={isConnected ? "check-circle" : "ip-network"} 
+                size={24} 
+                color={isConnected ? '#4CAF50' : '#4444FF'} 
+              />
             </View>
           </View>
 
@@ -365,6 +511,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+    minHeight: 100,
   },
   elevatedCard: {
     transform: [{ scale: 1.02 }],
@@ -448,7 +595,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ipInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#EEEEFF',
     borderRadius: 12,
     padding: 12,
